@@ -7,13 +7,13 @@ import android.os.VibrationEffect
 import android.os.VibratorManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class TimerState { IDLE, RUNNING, PAUSED, FINISHED }
@@ -32,8 +32,9 @@ class TimerViewModel : ViewModel() {
     private var timerJob: Job? = null
     private var sessionStartedAt: Long = 0L
 
-    // DBはContextが必要なので initDb() で初期化する
     private var dao: MeditationDao? = null
+    private val firestore = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
 
     // 履歴一覧(DAOのFlowをStateFlowに変換してUIに公開)
     private val _sessions = MutableStateFlow<List<MeditationSession>>(emptyList())
@@ -104,9 +105,21 @@ class TimerViewModel : ViewModel() {
                 _remainingSeconds.value--
             }
             _timerState.value = TimerState.FINISHED
-            // 完了レコードをDBに保存
-            dao?.insert(MeditationSession(startedAt = sessionStartedAt, durationMinutes = _selectedMinutes.value))
+            val session = MeditationSession(startedAt = sessionStartedAt, durationMinutes = _selectedMinutes.value)
+            dao?.insert(session)
+            saveToFirestore(session)
         }
+    }
+
+    private fun saveToFirestore(session: MeditationSession) {
+        val uid = auth.currentUser?.uid ?: return
+        val data = mapOf(
+            "startedAt" to session.startedAt,
+            "durationMinutes" to session.durationMinutes
+        )
+        firestore.collection("users").document(uid)
+            .collection("sessions")
+            .add(data)
     }
 
     fun playBellAndVibrate(context: Context) {

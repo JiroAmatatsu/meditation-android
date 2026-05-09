@@ -37,14 +37,33 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MeditationTimerTheme {
-                TimerScreen()
+                AppRoot()
             }
         }
     }
 }
 
 @Composable
-fun TimerScreen(vm: TimerViewModel = viewModel()) {
+fun AppRoot(authVm: AuthViewModel = viewModel()) {
+    val authState by authVm.authState.collectAsState()
+
+    when (authState) {
+        is AuthState.Loading -> {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Teal)
+            }
+        }
+        is AuthState.Authenticated -> {
+            TimerScreen(onSignOut = { authVm.signOut() })
+        }
+        else -> {
+            AuthScreen(authVm = authVm)
+        }
+    }
+}
+
+@Composable
+fun TimerScreen(vm: TimerViewModel = viewModel(), onSignOut: () -> Unit = {}) {
     val context = LocalContext.current
     val selectedMinutes by vm.selectedMinutes.collectAsState()
     val remainingSeconds by vm.remainingSeconds.collectAsState()
@@ -77,7 +96,16 @@ fun TimerScreen(vm: TimerViewModel = viewModel()) {
             item {
                 Spacer(modifier = Modifier.height(48.dp))
 
-                Text("瞑想タイマー", fontSize = 14.sp, color = TextMuted, letterSpacing = 2.sp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("瞑想タイマー", fontSize = 14.sp, color = TextMuted, letterSpacing = 2.sp)
+                    TextButton(onClick = onSignOut) {
+                        Text("ログアウト", fontSize = 12.sp, color = TextMuted)
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(40.dp))
 
