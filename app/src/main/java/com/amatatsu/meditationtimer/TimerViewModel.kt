@@ -1,5 +1,11 @@
 package com.amatatsu.meditationtimer
 
+import android.content.Context
+import android.media.AudioAttributes
+import android.media.SoundPool
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.VibratorManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -9,27 +15,39 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// タイマーの状態を表すenum
 enum class TimerState { IDLE, RUNNING, PAUSED, FINISHED }
 
 class TimerViewModel : ViewModel() {
 
-    // 設定分数(1〜120分)
     private val _selectedMinutes = MutableStateFlow(10)
     val selectedMinutes: StateFlow<Int> = _selectedMinutes.asStateFlow()
 
-    // 残り秒数
     private val _remainingSeconds = MutableStateFlow(0)
     val remainingSeconds: StateFlow<Int> = _remainingSeconds.asStateFlow()
 
-    // タイマーの状態
     private val _timerState = MutableStateFlow(TimerState.IDLE)
     val timerState: StateFlow<TimerState> = _timerState.asStateFlow()
 
     private var timerJob: Job? = null
 
+    // SoundPool は初期化にContextが必要なので遅延初期化
+    private var soundPool: SoundPool? = null
+    private var bellSoundId: Int = 0
+
+    fun initSound(context: Context) {
+        if (soundPool != null) return
+        val attrs = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        soundPool = SoundPool.Builder()
+            .setMaxStreams(1)
+            .setAudioAttributes(attrs)
+            .build()
+        bellSoundId = soundPool!!.load(context, R.raw.bell, 1)
+    }
+
     fun setMinutes(minutes: Int) {
-        // 実行中は変更させない
         if (_timerState.value == TimerState.IDLE) {
             _selectedMinutes.value = minutes.coerceIn(1, 120)
         }
@@ -41,7 +59,7 @@ class TimerViewModel : ViewModel() {
                 _remainingSeconds.value = _selectedMinutes.value * 60
                 runTimer()
             }
-            TimerState.PAUSED -> runTimer() // 一時停止中は再開
+            TimerState.PAUSED -> runTimer()
             else -> {}
         }
     }
@@ -70,8 +88,20 @@ class TimerViewModel : ViewModel() {
         }
     }
 
+    fun playBellAndVibrate(context: Context) {
+        // 鐘を鳴らす
+        soundPool?.play(bellSoundId, 1f, 1f, 0, 0, 1f)
+
+        // 3秒振動(API 31以上のVibratorManagerを使用)
+        val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+        val effect = VibrationEffect.createOneShot(3000, VibrationEffect.DEFAULT_AMPLITUDE)
+        vibratorManager.defaultVibrator.vibrate(effect)
+    }
+
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
+        soundPool?.release()
+        soundPool = null
     }
 }

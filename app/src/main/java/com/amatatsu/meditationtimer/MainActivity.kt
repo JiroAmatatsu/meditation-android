@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -39,9 +40,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun TimerScreen(vm: TimerViewModel = viewModel()) {
+    val context = LocalContext.current
     val selectedMinutes by vm.selectedMinutes.collectAsState()
     val remainingSeconds by vm.remainingSeconds.collectAsState()
     val timerState by vm.timerState.collectAsState()
+
+    // 音声の初期化
+    LaunchedEffect(Unit) { vm.initSound(context) }
+
+    // FINISHED になったら音と振動を発火
+    LaunchedEffect(timerState) {
+        if (timerState == TimerState.FINISHED) vm.playBellAndVibrate(context)
+    }
 
     val displaySeconds = if (timerState == TimerState.IDLE) selectedMinutes * 60 else remainingSeconds
     val displayColor = when (timerState) {
